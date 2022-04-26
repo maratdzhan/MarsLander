@@ -48,17 +48,18 @@ struct RouteParameters {
     int rotate0=0, int power1=0
     ) : x0(x0), x1(x1), y0(y0), y1(y1), 
     vx0(vx0),vx1(vx1),vy0(vy0),vy1(vy1),
-    rotate0(rotate0), power1(power1)
+    rotate0(rotate0), power(power)
     {}
+
+    RouteParameters() {}
 
 
     int x0,x1;
     int y0,y1;
     int vx0,vx1;
     int vy0,vy1;
-    int power0,power1;
+    int power;
     int rotate0, rotate1;
-    int rotation0,rotation1;
 };
 
 void p_swap(Point & p1, Point & p2) {
@@ -309,6 +310,7 @@ class Ship {
         _prev_power = pwr;
     }
     void CorrectRoute() ;
+
     bool BuildRoute() {
         cerr<<"BuildRoute()\n";
         route.push_back(Point{x,y}); 
@@ -358,6 +360,7 @@ class Ship {
         }
         
     }
+
     int GetLineHeight(Point lhs, Point rhs, int const x) {
         // also depends on bypass direction
         // just swap lhs<->rhs
@@ -448,6 +451,28 @@ class Ship {
     }
     void CorrectLastPoint();
 
+    void BuildRouteParameters() {
+        // Route parameters answers for lines
+        // between route points
+        // if route consist of 4 point, then amount of lines is 3
+        // When first initialization, last route line must have 
+        // INITIAL BOUNDARY CONDITIONS
+        
+        int v = route_point;
+        RP.resize(v);
+        for (int i = v-1; i >= 0 ; --i)
+        {
+            RouteParameters p(route[i+1].x, route[i].x, route[i+1].y, route[i].y);
+            RP[i] = p;
+        }
+        --v;
+        RP[v].vx0 = h_speed;
+        RP[v].vy0 = v_speed;
+        RP[v].power = power;
+        RP[v].rotate0 = rotate;
+
+    }
+    
 
     private:
     Surface * surface;
@@ -499,6 +524,7 @@ void Ship::Processing()  {
             CalculateRoute();
             isObjectBuilded = true;
             route_point = route.size()-1;
+            BuildRouteParameters();
             CalculateStrategy();
         }
         
@@ -510,16 +536,7 @@ void Ship::Processing()  {
 }
 
 void Ship::CorrectLastPoint() {
-    if (abs(h_speed) > 2 * landing_h_speed_limit) { 
-        // 6 - speed of ship rotation
-        int tx = 6 + (abs(h_speed) - landing_h_speed_limit)/4;
-        cerr<<"time to reach point "<<tx<<endl;
-        int sign = (route[route_point-1].x - x < 0 ? 1 : -1);
-        int rt = h_speed * tx + 2 * sign * 0.7 * tx * tx;
-        rt = rt * 1.1;
-        cerr<<"need new coord "<<rt<<endl;
-        route[route_point-1].x += rt;
-    }
+    
 }
 
 void Ship::CurrentState()  {
@@ -554,6 +571,7 @@ void Ship::CurrentState()  {
             // but if need to land, run landing program
 
         }   
+
         _prev_rotate = 75;
         _prev_power = 0;   
         if (x < 5400)
@@ -566,21 +584,59 @@ void Ship::CurrentState()  {
 
 }
 
-
+int CalculateX(RouteParameters & RP) {
+    int _t1 = 0, _t2 = 0;
+    if (RP.power != 0) {
+        int _sin = sin(RP.rotate1 * M_PI / 180);
+        int d = 4*(RP.vx0*RP.vx0 + (2 * _sin * RP.power * (RP.x1 - RP.x0)));
+        // d < 0 - point cant be reached
+        if (d < 0) return (-1);
+        else d = sqrt(d) + 1;
+        _t1 = (-RP.vx0 - d)/(2*RP.power*_sin);
+        _t2 = (-RP.vx0 + d)/(2*RP.power*_sin);
+    } else if (RP.vx0 != 0) {
+        _t1 = (RP.x1 - RP.x0) / RP.vx0;
+        if (_t1 < 0) return (-1);
+        else return (_t1); 
+    } else return (-1);
+}
 
 void Ship::CalculateStrategy() {
+    // Algorithm to build route parameters, based on 
+    // bound conditions
+
     // For each route interval ship must build strategy. 
     // Strategy calculating border condition between neighbor 
     // Route points allow reach every point with conditions, 
     // That allow to reach next point
-    for (int i = route_point; i > 0; --i) {
-        
+    int _pow ;
+    int _rot ;
+    int _t=0;
+    int _ddev = 100000;
+    for (int i = route_point; i >= 0; --i) {
+        _rot = 90;
+        _pow = 0;
+        while(_pow < 5) {
+            while(_rot>=-90) {
+                cerr<<_pow<<"|"<<_rot<<endl;
+                RP[i].power = _pow;
+                RP[i].rotate1 = _rot;
+                _t = CalculateX(RP[i]);
+                if (_t > 0) {
+                    
+                }
+
+
+                --_rot;
+            }
+            ++_pow;
+        }
     }
 
 }
 
 void Ship::CorrectRoute() {
-
+    
 }
 
 bool Ship::RouteModule() {
