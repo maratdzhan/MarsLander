@@ -49,9 +49,9 @@ struct RouteParameters {
     ) : x0(x0), x1(x1), y0(y0), y1(y1), 
     vx0(vx0),vx1(vx1),vy0(vy0),vy1(vy1),
     rotate0(rotate0), power(power)
-    {}
+    { expected_time = 0;}
 
-    RouteParameters() {}
+    RouteParameters() { expected_time = 0; }
 
 
     int x0,x1;
@@ -60,6 +60,7 @@ struct RouteParameters {
     int vy0,vy1;
     int power;
     int rotate0, rotate1;
+    int expected_time;
 };
 
 void p_swap(Point & p1, Point & p2) {
@@ -587,8 +588,8 @@ void Ship::CurrentState()  {
 int CalculateX(RouteParameters & RP) {
     int _t1 = 0, _t2 = 0;
     if (RP.power != 0) {
-        int _sin = sin(RP.rotate1 * M_PI / 180);
-        int d = 4*(RP.vx0*RP.vx0 + (2 * _sin * RP.power * (RP.x1 - RP.x0)));
+        double _sin = sin(RP.rotate1 * M_PI / 180);
+        double d = 4*(RP.vx0*RP.vx0 + (2 * _sin * RP.power * (RP.x1 - RP.x0)));
         // d < 0 - point cant be reached
         if (d < 0) return (-1);
         else d = sqrt(d) + 1;
@@ -599,6 +600,15 @@ int CalculateX(RouteParameters & RP) {
         if (_t1 < 0) return (-1);
         else return (_t1); 
     } else return (-1);
+    return (_t1 > 0 ? (_t2 > 0 ? min(_t1,_t2) : _t1) : (_t2 > 0 ? _t2 : -1));
+}
+
+int CalculateY(RouteParameters & RP, int _t) {
+    double _cos = cos(RP.rotate1 * M_PI / 180);
+    double y = RP.y0 + RP.vy0*_t+(RP.power*_cos + g) * _t * _t / 2;
+    
+    return int(y);
+
 }
 
 void Ship::CalculateStrategy() {
@@ -609,24 +619,37 @@ void Ship::CalculateStrategy() {
     // Strategy calculating border condition between neighbor 
     // Route points allow reach every point with conditions, 
     // That allow to reach next point
-    int _pow ;
-    int _rot ;
+    int _pow,_min_pow ;
+    int _rot,_min_rot ;
     int _t=0;
-    int _ddev = 100000;
-    for (int i = route_point; i >= 0; --i) {
-        _rot = 90;
+    int yn = 0;
+    for (int i = route_point; i >= 0; --i) 
+    {
+        int _ddev = 100000;
         _pow = 0;
-        while(_pow < 5) {
-            while(_rot>=-90) {
+        while(_pow < 5) 
+        {
+            _rot = 90;
+            while(_rot>=-90) 
+            {
                 cerr<<_pow<<"|"<<_rot<<endl;
                 RP[i].power = _pow;
                 RP[i].rotate1 = _rot;
                 _t = CalculateX(RP[i]);
-                if (_t > 0) {
-                    
+                if (_t > 0 && _t < 60) {
+                    yn = CalculateY(RP[i], _t);
+                    if (abs(yn-RP[i].y1) < _ddev) {
+                        // if found min -> next deviation will be greater, than current
+                        // not included in MVP: switch deviation in one cycle 
+                        // not affect on another cycle
+                        // if (abs(yn-RP[i].y1) > abs(_ddev)) continue; 
+                        _ddev = abs(yn-RP[i].y1);
+                        _min_rot = _rot;
+                        _min_pow = _pow;
+                        RP[i].expected_time = _t;
+                        RP[i].y1 = yn;
+                    }
                 }
-
-
                 --_rot;
             }
             ++_pow;
